@@ -1,0 +1,24 @@
+# .gitignore cho dự án Python
+
+# Thư mục môi trường ảo
+venv/
+
+# Các tệp cấu hình IDE, editor
+.idea/
+.vscode/
+
+# Các tệp cache của Python
+__pycache__/
+*.pyc
+
+# Thư mục cài đặt gói
+*.egg-info/
+dist/
+build/
+
+# Các tệp hệ thống (Windows)
+Thumbs.db
+Desktop.ini
+
+# Tệp môi trường
+.env
