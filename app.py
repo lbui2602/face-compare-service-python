@@ -15,6 +15,36 @@ def resize_image(image, max_size=800):
         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     return image
 
+@app.route('/detect-face', methods=['POST'])
+def detect_face():
+    if 'image' not in request.files:
+        return jsonify({'error': 'Thiếu ảnh'}), 400
+
+    img_file = request.files['image']
+
+    try:
+        # Đọc ảnh từ bộ nhớ đệm
+        image = Image.open(io.BytesIO(img_file.read()))
+
+        # Giảm kích thước và chuẩn hóa ảnh
+        image = resize_image(image).convert('RGB')
+
+        # Chuyển thành mảng byte
+        img_bytes = io.BytesIO()
+        image.save(img_bytes, format='JPEG')
+        img_bytes.seek(0)
+
+        # Nhận diện khuôn mặt
+        img_data = face_recognition.load_image_file(img_bytes)
+        face_locations = face_recognition.face_locations(img_data)
+
+        # Kiểm tra số lượng khuôn mặt tìm thấy
+        has_face = len(face_locations) > 0
+
+        return jsonify({'face_detected': has_face})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/compare-faces', methods=['POST'])
 def compare_faces():
     if 'image1' not in request.files or 'image2' not in request.files:
@@ -63,8 +93,9 @@ def compare_faces():
         encoding1 = encodings1[0]
         encoding2 = encodings2[0]
 
-        result = bool(face_recognition.compare_faces([encoding1], encoding2)[0])
-        return jsonify({'matched': result})
+        distance = face_recognition.face_distance([encoding1], encoding2)[0]
+        result = distance < 0.5
+        return jsonify({'matched': bool(result)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
