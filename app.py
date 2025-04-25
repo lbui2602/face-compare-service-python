@@ -52,8 +52,12 @@ def compare_faces():
         encodings1 = face_recognition.face_encodings(img1_data)
         encodings2 = face_recognition.face_encodings(img2_data)
 
-        if len(encodings1) == 0 or len(encodings2) == 0:
-            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh'}), 400
+        if len(encodings1) == 0:
+            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh người dùng (image1)'}), 400
+
+        if len(encodings2) == 0:
+            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh server (image2)'}), 400
+
 
         # Chỉ sử dụng khuôn mặt đầu tiên trong danh sách
         encoding1 = encodings1[0]
