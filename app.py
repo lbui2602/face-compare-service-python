@@ -27,11 +27,17 @@ def detect_face():
         image = Image.open(io.BytesIO(img_file.read()))
 
         # Giảm kích thước và chuẩn hóa ảnh
-        image = resize_image(image).convert('RGB')
+        # image = resize_image(image).convert('RGB')
+        image = image.convert('RGB')
+
+        print("Kích thước ảnh:", image.size)
+        # print("Dung lượng ảnh (byte):", len(img_bytes.getvalue()))
 
         # Chuyển thành mảng byte
         img_bytes = io.BytesIO()
-        image.save(img_bytes, format='JPEG')
+        # image.save(img_bytes, format='JPEG')
+        image.save(img_bytes, format='JPEG', quality=95)  # chất lượng cao hơn, ít nén hơn
+
         img_bytes.seek(0)
 
         # Nhận diện khuôn mặt
@@ -100,4 +106,4 @@ def compare_faces():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
