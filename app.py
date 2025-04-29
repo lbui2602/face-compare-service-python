@@ -89,10 +89,10 @@ def compare_faces():
         encodings2 = face_recognition.face_encodings(img2_data)
 
         if len(encodings1) == 0:
-            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh người dùng (image1)'}), 400
+            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh người dùng'}), 400
 
         if len(encodings2) == 0:
-            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh server (image2)'}), 400
+            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh server'}), 400
 
 
         # Chỉ sử dụng khuôn mặt đầu tiên trong danh sách
@@ -100,7 +100,7 @@ def compare_faces():
         encoding2 = encodings2[0]
 
         distance = face_recognition.face_distance([encoding1], encoding2)[0]
-        result = distance < 0.5
+        result = distance < 0.4
         return jsonify({'matched': bool(result)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
