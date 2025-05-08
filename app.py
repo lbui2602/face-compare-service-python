@@ -1,9 +1,11 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse
 import face_recognition
 import io
 from PIL import Image
+import asyncio
 
-app = Flask(__name__)
+app = FastAPI()
 
 # Hàm giảm kích thước ảnh
 def resize_image(image, max_size=800):
@@ -15,29 +17,20 @@ def resize_image(image, max_size=800):
         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     return image
 
-@app.route('/detect-face', methods=['POST'])
-def detect_face():
-    if 'image' not in request.files:
-        return jsonify({'error': 'Thiếu ảnh'}), 400
-
-    img_file = request.files['image']
-
+@app.post("/detect-face")
+async def detect_face(image: UploadFile = File(...)):
     try:
+        img_bytes = await image.read()
+
         # Đọc ảnh từ bộ nhớ đệm
-        image = Image.open(io.BytesIO(img_file.read()))
+        image = Image.open(io.BytesIO(img_bytes))
 
         # Giảm kích thước và chuẩn hóa ảnh
-        # image = resize_image(image).convert('RGB')
         image = image.convert('RGB')
 
-        print("Kích thước ảnh:", image.size)
-        # print("Dung lượng ảnh (byte):", len(img_bytes.getvalue()))
-
-        # Chuyển thành mảng byte
+        # Lưu ảnh thành mảng byte để xử lý
         img_bytes = io.BytesIO()
-        # image.save(img_bytes, format='JPEG')
-        image.save(img_bytes, format='JPEG', quality=95)  # chất lượng cao hơn, ít nén hơn
-
+        image.save(img_bytes, format='JPEG', quality=95)  # Chất lượng cao hơn, ít nén hơn
         img_bytes.seek(0)
 
         # Nhận diện khuôn mặt
@@ -47,22 +40,19 @@ def detect_face():
         # Kiểm tra số lượng khuôn mặt tìm thấy
         has_face = len(face_locations) > 0
 
-        return jsonify({'face_detected': has_face})
+        return JSONResponse(content={'face_detected': has_face})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.route('/compare-faces', methods=['POST'])
-def compare_faces():
-    if 'image1' not in request.files or 'image2' not in request.files:
-        return jsonify({'error': 'Thiếu ảnh'}), 400
-
-    img1_file = request.files['image1']
-    img2_file = request.files['image2']
-
+@app.post("/compare-faces")
+async def compare_faces(image1: UploadFile = File(...), image2: UploadFile = File(...)):
     try:
+        img1_bytes = await image1.read()
+        img2_bytes = await image2.read()
+
         # Đọc ảnh từ bộ nhớ đệm
-        img1 = Image.open(io.BytesIO(img1_file.read()))
-        img2 = Image.open(io.BytesIO(img2_file.read()))
+        img1 = Image.open(io.BytesIO(img1_bytes))
+        img2 = Image.open(io.BytesIO(img2_bytes))
 
         # Giảm kích thước ảnh trước khi xử lý
         img1 = resize_image(img1)
@@ -88,22 +78,27 @@ def compare_faces():
         encodings1 = face_recognition.face_encodings(img1_data)
         encodings2 = face_recognition.face_encodings(img2_data)
 
+        # Kiểm tra nếu không tìm thấy khuôn mặt trong ảnh
         if len(encodings1) == 0:
-            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh người dùng'}), 400
+            raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh người dùng")
 
         if len(encodings2) == 0:
-            return jsonify({'error': 'Không tìm thấy khuôn mặt trong ảnh server'}), 400
-
+            raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh server")
 
         # Chỉ sử dụng khuôn mặt đầu tiên trong danh sách
         encoding1 = encodings1[0]
         encoding2 = encodings2[0]
 
+        # Tính khoảng cách giữa hai khuôn mặt
         distance = face_recognition.face_distance([encoding1], encoding2)[0]
-        result = distance < 0.4
-        return jsonify({'matched': bool(result)})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        result = distance < 0.4  # Nếu khoảng cách nhỏ hơn 0.4 thì coi là trùng khớp
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        return JSONResponse(content={'matched': bool(result)})
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    # Chạy ứng dụng FastAPI
+    uvicorn.run(app, host="0.0.0.0", port=8000)
