@@ -21,6 +21,29 @@ def resize_image(image, max_size=800):
 # Tạo một ThreadPoolExecutor cho phép xử lý song song
 executor = ThreadPoolExecutor()
 
+@app.post("/detect-face")
+async def detect_face(image: UploadFile = File(...)):
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert('RGB')
+
+        # Nếu muốn resize: pil_image = resize_image(pil_image)
+
+        # Chuyển sang mảng byte
+        img_bytes = io.BytesIO()
+        pil_image.save(img_bytes, format='JPEG', quality=95)
+        img_bytes.seek(0)
+
+        # Nhận diện khuôn mặt
+        img_data = face_recognition.load_image_file(img_bytes)
+        face_locations = face_recognition.face_locations(img_data)
+        has_face = len(face_locations) > 0
+
+        return {"face_detected": has_face}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # Hàm so sánh khuôn mặt
 def compare_faces_sync(img1_bytes, img2_bytes):
     try:
