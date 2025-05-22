@@ -66,9 +66,14 @@ def compare_faces_sync(img1_bytes, img2_bytes):
         img1_data = face_recognition.load_image_file(img1_bytes)
         img2_data = face_recognition.load_image_file(img2_bytes)
 
-        encodings1 = face_recognition.face_encodings(img1_data)
-        encodings2 = face_recognition.face_encodings(img2_data)
+        # Face Detection 
+        face_locations1 = face_recognition.face_locations(img1_data)
+        face_locations2 = face_recognition.face_locations(img2_data)
 
+        # Encoding face
+        encodings1 = face_recognition.face_encodings(img1_data, known_face_locations=face_locations1)
+        encodings2 = face_recognition.face_encodings(img2_data, known_face_locations=face_locations2)
+        
         if len(encodings1) == 0:
             raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh người dùng")
         if len(encodings2) == 0:
