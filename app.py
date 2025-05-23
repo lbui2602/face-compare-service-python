@@ -37,9 +37,9 @@ async def detect_face(image: UploadFile = File(...)):
         # Nhận diện khuôn mặt
         img_data = face_recognition.load_image_file(img_bytes)
         face_locations = face_recognition.face_locations(img_data)
-        has_face = len(face_locations) > 0
+        has_face = len(face_locations) == 1
 
-        return {"face_detected": has_face}
+        return {"face_detected": has_face, "length": len(face_locations)}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -82,11 +82,16 @@ def compare_faces_sync(img1_bytes, img2_bytes):
         if len(encodings2) == 0:
             raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh server")
 
-        encoding1 = encodings1[0]
         encoding2 = encodings2[0]
 
-        distance = face_recognition.face_distance([encoding1], encoding2)[0]
-        return distance < 0.4  # Nếu khoảng cách nhỏ hơn 0.4 thì coi là trùng khớp
+        # So sánh tất cả các encoding1 với encoding2
+        for encoding1 in encodings1:
+            distance = face_recognition.face_distance([encoding2], encoding1)[0]
+            if distance < 0.4:
+                return True  # Có ít nhất 1 khuôn mặt trùng khớp
+
+        # Nếu không có khuôn mặt nào khớp
+        return False
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
