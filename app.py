@@ -73,6 +73,9 @@ def compare_faces_sync(img1_bytes, img2_bytes):
         # Encoding face
         encodings1 = face_recognition.face_encodings(img1_data, known_face_locations=face_locations1)
         encodings2 = face_recognition.face_encodings(img2_data, known_face_locations=face_locations2)
+
+        # encodings1 = face_recognition.face_encodings(img1_data)
+        # encodings2 = face_recognition.face_encodings(img2_data)
         
         if len(encodings1) == 0:
             raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh người dùng")
