@@ -80,7 +80,8 @@ def compare_encoding_with_label(img_bytes: bytes, encoding_by_label: list):
         face_locations = face_recognition.face_locations(img_data)
         if len(face_locations) == 0:
             # Không tìm thấy khuôn mặt
-            raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh người dùng")
+            # raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh người dùng")
+            return {"hi": "Không tìm thấy khuôn mặt."}
 
         encodings = face_recognition.face_encodings(img_data, known_face_locations=face_locations)
 
