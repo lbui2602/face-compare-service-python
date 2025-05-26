@@ -1,12 +1,16 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 import face_recognition
 import io
 from PIL import Image
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from pymongo import MongoClient
 
 app = FastAPI()
+client = MongoClient("mongodb://localhost:27017/")
+db = client["face"]
+collection = db["encodings"]
 
 # Hàm giảm kích thước ảnh
 def resize_image(image, max_size=800):
@@ -22,22 +26,39 @@ def resize_image(image, max_size=800):
 executor = ThreadPoolExecutor()
 
 @app.post("/detect-face")
-async def detect_face(image: UploadFile = File(...)):
+async def detect_face(
+    image: UploadFile = File(...),
+    label: str = Form(...)
+):
     try:
+        existing = collection.find_one({"label": label})
+        if existing:
+            return JSONResponse(
+                status_code=400,
+                content={"message": f"Label '{label}' đã tồn tại, không thể lưu trùng"}
+            )
         contents = await image.read()
         pil_image = Image.open(io.BytesIO(contents)).convert('RGB')
 
-        # Nếu muốn resize: pil_image = resize_image(pil_image)
+        pil_image = resize_image(pil_image)
 
-        # Chuyển sang mảng byte
+        # Chuyển sang bytes để xử lý
         img_bytes = io.BytesIO()
         pil_image.save(img_bytes, format='JPEG', quality=95)
         img_bytes.seek(0)
 
-        # Nhận diện khuôn mặt
+        # Nhận diện và encoding
         img_data = face_recognition.load_image_file(img_bytes)
         face_locations = face_recognition.face_locations(img_data)
         has_face = len(face_locations) == 1
+
+        if len(face_locations) == 1 :
+            encoding = face_recognition.face_encodings(img_data, known_face_locations=face_locations)[0]
+            encoding_list = encoding.tolist()
+            collection.insert_one({
+                "label": label,
+                "encoding": encoding_list
+            })
 
         return {"face_detected": has_face, "length": len(face_locations)}
 
@@ -45,69 +66,59 @@ async def detect_face(image: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
     
 # Hàm so sánh khuôn mặt
-def compare_faces_sync(img1_bytes, img2_bytes):
+def compare_encoding_with_label(img_bytes: bytes, encoding_by_label: list):
     try:
-        img1 = Image.open(io.BytesIO(img1_bytes))
-        img2 = Image.open(io.BytesIO(img2_bytes))
+        pil_image = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+        pil_image = resize_image(pil_image)
 
-        img1 = resize_image(img1)
-        img2 = resize_image(img2)
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='JPEG')
+        buffer.seek(0)
 
-        img1 = img1.convert('RGB')
-        img2 = img2.convert('RGB')
+        img_data = face_recognition.load_image_file(buffer)
 
-        img1_bytes = io.BytesIO()
-        img2_bytes = io.BytesIO()
-        img1.save(img1_bytes, format='JPEG')
-        img2.save(img2_bytes, format='JPEG')
-
-        img1_bytes.seek(0)
-        img2_bytes.seek(0)
-        img1_data = face_recognition.load_image_file(img1_bytes)
-        img2_data = face_recognition.load_image_file(img2_bytes)
-
-        # Face Detection 
-        face_locations1 = face_recognition.face_locations(img1_data)
-        face_locations2 = face_recognition.face_locations(img2_data)
-
-        # Encoding face
-        encodings1 = face_recognition.face_encodings(img1_data, known_face_locations=face_locations1)
-        encodings2 = face_recognition.face_encodings(img2_data, known_face_locations=face_locations2)
-
-        # encodings1 = face_recognition.face_encodings(img1_data)
-        # encodings2 = face_recognition.face_encodings(img2_data)
-        
-        if len(encodings1) == 0:
+        face_locations = face_recognition.face_locations(img_data)
+        if len(face_locations) == 0:
+            # Không tìm thấy khuôn mặt
             raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh người dùng")
-        if len(encodings2) == 0:
-            raise HTTPException(status_code=400, detail="Không tìm thấy khuôn mặt trong ảnh server")
 
-        encoding2 = encodings2[0]
+        encodings = face_recognition.face_encodings(img_data, known_face_locations=face_locations)
 
-        # So sánh tất cả các encoding1 với encoding2
-        for encoding1 in encodings1:
-            distance = face_recognition.face_distance([encoding2], encoding1)[0]
+        for encoding in encodings:
+            distance = face_recognition.face_distance([encoding_by_label], encoding)[0]
             if distance < 0.4:
-                return True  # Có ít nhất 1 khuôn mặt trùng khớp
+                return {"matched": True}
 
-        # Nếu không có khuôn mặt nào khớp
-        return False
+        return {"matched": False}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e), "matched": False}
+
 
 @app.post("/compare-faces")
-async def compare_faces(image1: UploadFile = File(...), image2: UploadFile = File(...)):
+async def compare_face(
+    image: UploadFile = File(...),
+    label: str = Form(...)
+):
     try:
-        # Đọc ảnh từ client
-        img1_bytes = await image1.read()
-        img2_bytes = await image2.read()
+        # Lấy encoding từ DB theo label
+        data = collection.find_one({"label": label})
+        if not data:
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy label '{label}' trong database")
 
-        # Xử lý so sánh khuôn mặt trong ThreadPoolExecutor (song song)
+        encoding_by_label = data["encoding"]
+
+        # Đọc file ảnh
+        img_bytes = await image.read()
+
+        # Chạy sync function trong thread pool
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(executor, compare_faces_sync, img1_bytes, img2_bytes)
+        result = await loop.run_in_executor(executor, compare_encoding_with_label, img_bytes, encoding_by_label)
 
-        return JSONResponse(content={'matched': bool(result)})
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+        return JSONResponse(content=result)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
